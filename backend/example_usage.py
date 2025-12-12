@@ -145,8 +145,11 @@ def demo_mode():
     processor = ReviewProcessor()
     
     print("Processing sample reviews...")
-    print("(Note: Summarization requires Ollama to be running)")
+    print("(Note: Summarization and structured extraction require Ollama to be running)")
     print()
+    
+    # Process reviews and collect structured information
+    structured_reviews = []
     
     # Process without summarization first to show text cleaning
     for idx, review in enumerate(sample_reviews, 1):
@@ -171,6 +174,7 @@ def demo_mode():
         print()
         
         # Try to summarize if Ollama is available
+        summary = None
         try:
             summary = processor.summarize_with_ollama(processed['cleaned_text'], max_lines=2)
             print("Summary (2 lines):")
@@ -179,7 +183,43 @@ def demo_mode():
             print(f"Summary: [Ollama not available - {str(e)[:50]}]")
         
         print()
+        
+        # Try to extract structured information if we have a summary
+        if summary:
+            try:
+                structured_info = processor.extract_structured_info(summary)
+                print("Structured Information:")
+                print(f"  Product/Service: {structured_info['product_or_service_name']}")
+                print(f"  Key Point: {structured_info['key_point_description']}")
+                print(f"  Pain Point: {structured_info['key_pain_point']}")
+                print(f"  Sentiment: {structured_info['sentiment']}")
+                if structured_info['test_steps']:
+                    print(f"  Test Steps: {len(structured_info['test_steps'])} steps")
+                
+                # Add to structured reviews for JSON export
+                review_with_structure = {
+                    **processed,
+                    'summary': summary,
+                    **structured_info
+                }
+                structured_reviews.append(review_with_structure)
+                
+            except Exception as e:
+                print(f"Structured Extraction: [Error - {str(e)[:50]}]")
+        
         print()
+        print()
+    
+    # Try to save structured reviews to JSON if we have any
+    if structured_reviews:
+        output_file = 'structured_reviews_output.json'
+        try:
+            processor.save_structured_reviews_to_json(structured_reviews, output_file)
+            print("=" * 80)
+            print(f"✓ Structured reviews saved to: {output_file}")
+            print("=" * 80)
+        except Exception as e:
+            print(f"Error saving to JSON: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,8 @@ import logging
 from typing import Dict, Optional, List
 import requests
 import json
+import os
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -218,6 +220,199 @@ class ReviewProcessor:
                 })
         
         return processed_reviews
+    
+    def extract_structured_info(self, summary: str) -> Dict:
+        """
+        Extract structured information from a summarized review using Ollama LLM.
+        
+        Args:
+            summary: Summarized review text
+            
+        Returns:
+            Dictionary containing structured information with the following keys:
+            - product_or_service_name: str
+            - key_point_description: str
+            - key_pain_point: str
+            - sentiment: str
+            - test_steps: List[str]
+            - test_environment: Dict[str, str]
+        """
+        if not summary or len(summary.strip()) == 0:
+            return self._get_empty_structured_info()
+        
+        # Prepare the prompt for structured extraction
+        prompt = f"""Analyze the following review summary and extract structured information in JSON format.
+
+Review Summary:
+{summary}
+
+Extract the following information and respond ONLY with a valid JSON object (no additional text):
+{{
+  "product_or_service_name": "The name of the product or service mentioned (if not clearly stated, use 'Not specified')",
+  "key_point_description": "A short description (1-2 sentences) of the key point in the review",
+  "key_pain_point": "The key pain point or essence of the user feedback (if positive review, state the main benefit)",
+  "sentiment": "The sentiment expressed (Positive, Negative, Neutral, or Mixed)",
+  "test_steps": ["Step 1", "Step 2", "..."] (list of recommended test steps to reproduce the issue, or empty list if not applicable),
+  "test_environment": {{
+    "os": "Operating system (if mentioned)",
+    "software_version": "Software/app version (if mentioned)",
+    "product_model": "Product model name (if mentioned)",
+    "other": "Any other relevant environment details (if mentioned)"
+  }}
+}}
+
+Important: Return ONLY the JSON object, no additional text or explanation."""
+        
+        try:
+            # Call Ollama API
+            url = f"{self.ollama_base_url}/api/generate"
+            payload = {
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.2,  # Lower temperature for more consistent structured output
+                    "top_p": 0.9
+                }
+            }
+            
+            logger.info(f"Calling Ollama API for structured extraction with model {self.model}")
+            response = requests.post(url, json=payload, timeout=90)
+            response.raise_for_status()
+            
+            result = response.json()
+            llm_response = result.get('response', '').strip()
+            
+            # Try to parse the JSON response
+            # Sometimes LLM might add extra text, so we need to extract the JSON part
+            try:
+                # Try to find JSON object in the response
+                json_start = llm_response.find('{')
+                json_end = llm_response.rfind('}') + 1
+                
+                if json_start >= 0 and json_end > json_start:
+                    json_str = llm_response[json_start:json_end]
+                    structured_info = json.loads(json_str)
+                else:
+                    # If no JSON found, try parsing the entire response
+                    structured_info = json.loads(llm_response)
+                
+                # Validate and ensure all required fields are present
+                return self._validate_structured_info(structured_info)
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON from LLM response: {str(e)}")
+                logger.error(f"LLM Response: {llm_response}")
+                # Return empty structure with error
+                result = self._get_empty_structured_info()
+                result['extraction_error'] = f"JSON parsing error: {str(e)}"
+                return result
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error calling Ollama API: {str(e)}")
+            result = self._get_empty_structured_info()
+            result['extraction_error'] = f"API error: {str(e)}"
+            return result
+        except Exception as e:
+            logger.error(f"Unexpected error during structured extraction: {str(e)}")
+            result = self._get_empty_structured_info()
+            result['extraction_error'] = f"Unexpected error: {str(e)}"
+            return result
+    
+    def _get_empty_structured_info(self) -> Dict:
+        """
+        Get an empty structured information dictionary with default values.
+        
+        Returns:
+            Dictionary with empty/default values for all structured fields
+        """
+        return {
+            'product_or_service_name': 'Not specified',
+            'key_point_description': '',
+            'key_pain_point': '',
+            'sentiment': 'Unknown',
+            'test_steps': [],
+            'test_environment': {
+                'os': 'Not specified',
+                'software_version': 'Not specified',
+                'product_model': 'Not specified',
+                'other': 'Not specified'
+            }
+        }
+    
+    def _validate_structured_info(self, info: Dict) -> Dict:
+        """
+        Validate and normalize structured information dictionary.
+        
+        Args:
+            info: Dictionary with extracted structured information
+            
+        Returns:
+            Validated and normalized dictionary
+        """
+        # Get default structure
+        validated = self._get_empty_structured_info()
+        
+        # Update with extracted values
+        if 'product_or_service_name' in info:
+            validated['product_or_service_name'] = str(info['product_or_service_name'])
+        
+        if 'key_point_description' in info:
+            validated['key_point_description'] = str(info['key_point_description'])
+        
+        if 'key_pain_point' in info:
+            validated['key_pain_point'] = str(info['key_pain_point'])
+        
+        if 'sentiment' in info:
+            validated['sentiment'] = str(info['sentiment'])
+        
+        if 'test_steps' in info:
+            if isinstance(info['test_steps'], list):
+                validated['test_steps'] = [str(step) for step in info['test_steps']]
+            else:
+                validated['test_steps'] = [str(info['test_steps'])]
+        
+        if 'test_environment' in info and isinstance(info['test_environment'], dict):
+            # Update test_environment with extracted values
+            for key in ['os', 'software_version', 'product_model', 'other']:
+                if key in info['test_environment']:
+                    validated['test_environment'][key] = str(info['test_environment'][key])
+        
+        return validated
+    
+    def save_structured_reviews_to_json(self, reviews: List[Dict], output_file: str) -> None:
+        """
+        Save structured review information to a JSON file.
+        
+        Args:
+            reviews: List of review dictionaries with structured information
+            output_file: Path to the output JSON file
+        """
+        try:
+            # Create the directory if it doesn't exist
+            output_dir = os.path.dirname(output_file)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            
+            # Prepare the output data
+            output_data = {
+                'metadata': {
+                    'generated_at': datetime.utcnow().isoformat() + 'Z',
+                    'total_reviews': len(reviews),
+                    'model_used': self.model
+                },
+                'reviews': reviews
+            }
+            
+            # Write to JSON file
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(output_data, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"Successfully saved {len(reviews)} structured reviews to {output_file}")
+            
+        except Exception as e:
+            logger.error(f"Error saving structured reviews to JSON: {str(e)}")
+            raise
 
 
 def main():
