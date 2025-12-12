@@ -323,11 +323,10 @@ class TestStructuredInfoExtraction(unittest.TestCase):
     
     def test_save_structured_reviews_to_json(self):
         """Test saving structured reviews to JSON file."""
-        # Create a temporary directory and file path
-        temp_dir = tempfile.mkdtemp()
-        temp_path = os.path.join(temp_dir, 'test_output.json')
-        
-        try:
+        # Use context manager for automatic cleanup
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = os.path.join(temp_dir, 'test_output.json')
+            
             # Sample structured reviews
             reviews = [
                 {
@@ -381,11 +380,6 @@ class TestStructuredInfoExtraction(unittest.TestCase):
             self.assertEqual(len(data['reviews']), 2)
             self.assertEqual(data['reviews'][0]['id'], 'review1')
             self.assertEqual(data['reviews'][1]['id'], 'review2')
-            
-        finally:
-            # Clean up
-            if os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
     
     def test_save_structured_reviews_creates_directory(self):
         """Test that saving creates output directory if it doesn't exist."""
