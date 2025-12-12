@@ -6,8 +6,13 @@ based on a given search string.
 """
 
 import praw
+import logging
 from typing import List, Dict, Optional
 from datetime import datetime
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class RedditReviewExtractor:
@@ -59,7 +64,8 @@ class RedditReviewExtractor:
                 post_data = self._extract_post_data(submission)
                 results.append(post_data)
         except Exception as e:
-            print(f"Error searching subreddits: {str(e)}")
+            logger.error(f"Error searching subreddits: {str(e)}")
+            raise
         
         return results
     
@@ -94,7 +100,8 @@ class RedditReviewExtractor:
                 post_data = self._extract_post_data(submission)
                 results.append(post_data)
         except Exception as e:
-            print(f"Error searching subreddit {subreddit_name}: {str(e)}")
+            logger.error(f"Error searching subreddit {subreddit_name}: {str(e)}")
+            raise
         
         return results
     
@@ -159,7 +166,8 @@ class RedditReviewExtractor:
                 }
                 comments.append(comment_data)
         except Exception as e:
-            print(f"Error fetching comments for submission {submission_id}: {str(e)}")
+            logger.error(f"Error fetching comments for submission {submission_id}: {str(e)}")
+            raise
         
         return comments
     
@@ -197,7 +205,7 @@ def main():
     try:
         from config import REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
     except ImportError:
-        print("Error: config.py not found. Please create one from config.example.py")
+        logger.error("Error: config.py not found. Please create one from config.example.py")
         return
     
     # Initialize extractor
