@@ -9,7 +9,7 @@ This module provides functionality to process and summarize Reddit reviews using
 
 import re
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import requests
 import json
 
@@ -35,13 +35,13 @@ class ReviewProcessor:
         self.ollama_base_url = ollama_base_url.rstrip('/')
         self.model = model
         
-    def concatenate_review_text(self, title: str, body: str) -> str:
+    def concatenate_review_text(self, title: Optional[str], body: Optional[str]) -> str:
         """
         Concatenate the title and body of a review.
         
         Args:
-            title: Review title
-            body: Review body/selftext
+            title: Review title (can be None or empty)
+            body: Review body/selftext (can be None or empty)
             
         Returns:
             Concatenated text
@@ -53,12 +53,12 @@ class ReviewProcessor:
         # Concatenate with a space separator
         return f"{title} {body}".strip()
     
-    def clean_text(self, text: str) -> str:
+    def clean_text(self, text: Optional[str]) -> str:
         """
         Clean text by removing excessive whitespaces, emojis, and special characters.
         
         Args:
-            text: Input text to clean
+            text: Input text to clean (can be None or empty)
             
         Returns:
             Cleaned text
@@ -191,7 +191,7 @@ class ReviewProcessor:
         
         return result
     
-    def process_multiple_reviews(self, reviews: list, summarize: bool = True) -> list:
+    def process_multiple_reviews(self, reviews: List[Dict], summarize: bool = True) -> List[Dict]:
         """
         Process multiple reviews.
         
