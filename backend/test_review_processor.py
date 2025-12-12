@@ -9,6 +9,7 @@ import unittest
 import json
 import os
 import tempfile
+import shutil
 from review_processor import ReviewProcessor
 
 
@@ -322,9 +323,9 @@ class TestStructuredInfoExtraction(unittest.TestCase):
     
     def test_save_structured_reviews_to_json(self):
         """Test saving structured reviews to JSON file."""
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
-            temp_path = temp_file.name
+        # Create a temporary directory and file path
+        temp_dir = tempfile.mkdtemp()
+        temp_path = os.path.join(temp_dir, 'test_output.json')
         
         try:
             # Sample structured reviews
@@ -383,8 +384,8 @@ class TestStructuredInfoExtraction(unittest.TestCase):
             
         finally:
             # Clean up
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
     
     def test_save_structured_reviews_creates_directory(self):
         """Test that saving creates output directory if it doesn't exist."""

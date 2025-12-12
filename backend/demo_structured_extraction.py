@@ -43,7 +43,7 @@ def demo_without_ollama():
         {
             'id': 'review3',
             'title': 'Coffee Maker Review',
-            'selftext': 'Bought the Keurig K-Elite. Makes decent coffee, easy to use. Timer sometimes doesn\'t work properly but overall satisfied.',
+            'selftext': "Bought the Keurig K-Elite. Makes decent coffee, easy to use. Timer sometimes doesn't work properly but overall satisfied.",
             'subreddit': 'coffee',
             'score': 42
         }

@@ -13,7 +13,7 @@ from typing import Dict, Optional, List
 import requests
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -397,7 +397,7 @@ Important: Return ONLY the JSON object, no additional text or explanation."""
             # Prepare the output data
             output_data = {
                 'metadata': {
-                    'generated_at': datetime.utcnow().isoformat() + 'Z',
+                    'generated_at': datetime.now(timezone.utc).isoformat(),
                     'total_reviews': len(reviews),
                     'model_used': self.model
                 },
