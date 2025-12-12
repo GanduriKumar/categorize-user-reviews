@@ -1,14 +1,21 @@
-# Backend - Reddit Review Extractor
+# Backend - Reddit Review Extractor & Processor
 
-This module provides functionality to extract reviews and posts from Reddit subreddits using PRAW (Python Reddit API Wrapper).
+This module provides functionality to extract reviews and posts from Reddit subreddits using PRAW (Python Reddit API Wrapper), and to process and summarize them using Ollama LLM.
 
 ## Features
 
+### Review Extraction
 - Search for posts across all subreddits based on a search query
 - Search for posts in specific subreddit(s)
 - Extract post metadata (title, author, score, comments count, etc.)
 - Retrieve comments from specific posts
 - Filter results by time period
+
+### Review Processing & Summarization
+- Concatenate review title and body
+- Clean text from excessive whitespaces, emojis, and special characters
+- Summarize reviews into concise 2-line summaries using Ollama LLM
+- Batch process multiple reviews efficiently
 
 ## Setup
 
@@ -18,7 +25,17 @@ This module provides functionality to extract reviews and posts from Reddit subr
 pip install -r requirements.txt
 ```
 
-### 2. Configure Reddit API Credentials
+### 2. Install Ollama (for Review Summarization)
+
+To use the review summarization feature, you need to install and run Ollama:
+
+1. **Install Ollama**: Visit https://ollama.ai and follow installation instructions for your OS
+2. **Pull a model**: Run `ollama pull llama2` (or another model of your choice)
+3. **Verify it's running**: The Ollama API should be available at `http://localhost:11434`
+
+Note: The review extraction works independently of Ollama. Summarization is optional.
+
+### 3. Configure Reddit API Credentials
 
 1. Go to https://www.reddit.com/prefs/apps
 2. Click "Create App" or "Create Another App"
@@ -33,7 +50,7 @@ pip install -r requirements.txt
    - **client_id**: The string under your app name (e.g., "abc123def456")
    - **client_secret**: The "secret" value shown
 
-### 3. Create Configuration File
+### 4. Create Configuration File
 
 Copy the example configuration file and add your credentials:
 
@@ -47,7 +64,7 @@ Edit `config.py` and replace the placeholder values with your actual Reddit API 
 
 ## Usage
 
-### Basic Usage
+### Review Extraction - Basic Usage
 
 ```python
 from reddit_review_extractor import RedditReviewExtractor
@@ -126,6 +143,104 @@ python reddit_review_extractor.py
 
 This will search for "product review" across all subreddits and display the first 10 results.
 
+## Review Processing & Summarization
+
+### Basic Usage
+
+```python
+from review_processor import ReviewProcessor
+
+# Initialize the processor
+processor = ReviewProcessor(
+    ollama_base_url="http://localhost:11434",  # Default Ollama URL
+    model="llama2"  # Or any other model you have installed
+)
+
+# Example review data (from Reddit extraction)
+review_data = {
+    'id': 'abc123',
+    'title': 'Amazing Product! 😊',
+    'selftext': 'I   loved this product!!!  \n\n  Works great... #awesome',
+    'score': 150
+}
+
+# Process the review (concatenate, clean, and summarize)
+processed = processor.process_review(review_data, summarize=True)
+
+# Access the results
+print(f"Original: {review_data['title']} {review_data['selftext']}")
+print(f"Cleaned: {processed['cleaned_text']}")
+print(f"Summary: {processed['summary']}")
+```
+
+### Text Concatenation
+
+Combine title and body:
+
+```python
+concatenated = processor.concatenate_review_text(
+    title="Great Product",
+    body="Works perfectly and exceeded expectations"
+)
+# Result: "Great Product Works perfectly and exceeded expectations"
+```
+
+### Text Cleaning
+
+Clean text from whitespaces, emojis, and special characters:
+
+```python
+cleaned = processor.clean_text("I   loved this!!! 😊 #awesome @company")
+# Result: "I loved this! awesome company"
+```
+
+### Summarization
+
+Summarize cleaned text into 2 lines:
+
+```python
+summary = processor.summarize_with_ollama(
+    text="Long review text here...",
+    max_lines=2
+)
+```
+
+### Batch Processing
+
+Process multiple reviews at once:
+
+```python
+from reddit_review_extractor import RedditReviewExtractor
+from review_processor import ReviewProcessor
+
+# Extract reviews
+extractor = RedditReviewExtractor(client_id, client_secret, user_agent)
+reviews = extractor.search_all_subreddits("product review", limit=10)
+
+# Process all reviews
+processor = ReviewProcessor()
+processed_reviews = processor.process_multiple_reviews(reviews, summarize=True)
+
+# Each processed review now includes:
+# - concatenated_text: Title + body combined
+# - cleaned_text: Cleaned version without emojis/special chars
+# - summary: 2-line summary (if Ollama is available)
+```
+
+### Complete Example
+
+Run the complete example script:
+
+```bash
+python example_usage.py
+```
+
+This demonstrates the full workflow:
+1. Extract reviews from Reddit
+2. Concatenate title and body
+3. Clean the text
+4. Generate 2-line summaries using Ollama
+
 ## Data Structure
 
 ### Post Data
@@ -156,6 +271,16 @@ Each comment contains:
 - `created_utc`: Comment creation timestamp (ISO format)
 - `parent_id`: ID of parent comment/post
 - `is_submitter`: Whether the commenter is the post author
+
+### Processed Review Data
+
+After processing with `ReviewProcessor`, each review additionally contains:
+
+- `concatenated_text`: Combined title and body text
+- `cleaned_text`: Text cleaned of emojis, special characters, and excessive whitespace
+- `summary`: 2-line summary generated by Ollama (if summarization is enabled)
+- `summary_error`: Error message if summarization failed
+- `processing_error`: Error message if processing failed
 
 ## Rate Limits
 
