@@ -6,6 +6,10 @@ __pycache__/
 # Configuration files with credentials
 backend/config.py
 
+# Output files
+backend/structured_reviews_demo.json
+backend/structured_reviews_output.json
+
 # C extensions
 *.so
 

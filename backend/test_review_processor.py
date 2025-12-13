@@ -6,6 +6,10 @@ Or simply: python test_review_processor.py
 """
 
 import unittest
+import json
+import os
+import tempfile
+import shutil
 from review_processor import ReviewProcessor
 
 
@@ -227,6 +231,178 @@ class TestReviewProcessorEdgeCases(unittest.TestCase):
         self.assertIn("Great", result)
 
 
+class TestStructuredInfoExtraction(unittest.TestCase):
+    """Test structured information extraction."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.processor = ReviewProcessor()
+    
+    def test_get_empty_structured_info(self):
+        """Test getting empty structured info."""
+        result = self.processor._get_empty_structured_info()
+        
+        # Check all required fields are present
+        self.assertIn('product_or_service_name', result)
+        self.assertIn('key_point_description', result)
+        self.assertIn('key_pain_point', result)
+        self.assertIn('sentiment', result)
+        self.assertIn('test_steps', result)
+        self.assertIn('test_environment', result)
+        
+        # Check test_environment has all required fields
+        self.assertIn('os', result['test_environment'])
+        self.assertIn('software_version', result['test_environment'])
+        self.assertIn('product_model', result['test_environment'])
+        self.assertIn('other', result['test_environment'])
+    
+    def test_validate_structured_info_with_valid_data(self):
+        """Test validation with valid structured data."""
+        input_data = {
+            'product_or_service_name': 'Test Product',
+            'key_point_description': 'Great product',
+            'key_pain_point': 'None',
+            'sentiment': 'Positive',
+            'test_steps': ['Step 1', 'Step 2'],
+            'test_environment': {
+                'os': 'Windows 10',
+                'software_version': '1.0.0',
+                'product_model': 'Model X',
+                'other': 'None'
+            }
+        }
+        
+        result = self.processor._validate_structured_info(input_data)
+        
+        self.assertEqual(result['product_or_service_name'], 'Test Product')
+        self.assertEqual(result['key_point_description'], 'Great product')
+        self.assertEqual(result['sentiment'], 'Positive')
+        self.assertEqual(len(result['test_steps']), 2)
+        self.assertEqual(result['test_environment']['os'], 'Windows 10')
+    
+    def test_validate_structured_info_with_partial_data(self):
+        """Test validation with partial structured data."""
+        input_data = {
+            'product_or_service_name': 'Test Product',
+            'sentiment': 'Neutral'
+        }
+        
+        result = self.processor._validate_structured_info(input_data)
+        
+        # Should have the provided fields
+        self.assertEqual(result['product_or_service_name'], 'Test Product')
+        self.assertEqual(result['sentiment'], 'Neutral')
+        
+        # Should have default values for missing fields
+        self.assertEqual(result['key_point_description'], '')
+        self.assertEqual(result['test_steps'], [])
+    
+    def test_validate_structured_info_converts_types(self):
+        """Test that validation converts values to strings."""
+        input_data = {
+            'product_or_service_name': 123,
+            'sentiment': True,
+            'test_steps': [1, 2, 3]
+        }
+        
+        result = self.processor._validate_structured_info(input_data)
+        
+        # Should convert to strings
+        self.assertEqual(result['product_or_service_name'], '123')
+        self.assertEqual(result['sentiment'], 'True')
+        self.assertEqual(result['test_steps'], ['1', '2', '3'])
+    
+    def test_extract_structured_info_with_empty_summary(self):
+        """Test structured extraction with empty summary."""
+        result = self.processor.extract_structured_info("")
+        
+        # Should return default values
+        self.assertEqual(result['product_or_service_name'], 'Not specified')
+        self.assertEqual(result['sentiment'], 'Unknown')
+        self.assertIsInstance(result['test_steps'], list)
+    
+    def test_save_structured_reviews_to_json(self):
+        """Test saving structured reviews to JSON file."""
+        # Use context manager for automatic cleanup
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = os.path.join(temp_dir, 'test_output.json')
+            
+            # Sample structured reviews
+            reviews = [
+                {
+                    'id': 'review1',
+                    'product_or_service_name': 'Test Product',
+                    'key_point_description': 'Great features',
+                    'key_pain_point': 'None',
+                    'sentiment': 'Positive',
+                    'test_steps': [],
+                    'test_environment': {
+                        'os': 'Windows 10',
+                        'software_version': '1.0',
+                        'product_model': 'Model X',
+                        'other': 'None'
+                    }
+                },
+                {
+                    'id': 'review2',
+                    'product_or_service_name': 'Another Product',
+                    'key_point_description': 'Has issues',
+                    'key_pain_point': 'Crashes often',
+                    'sentiment': 'Negative',
+                    'test_steps': ['Open app', 'Click button', 'Observe crash'],
+                    'test_environment': {
+                        'os': 'macOS',
+                        'software_version': '2.0',
+                        'product_model': 'Model Y',
+                        'other': 'None'
+                    }
+                }
+            ]
+            
+            # Save to JSON
+            self.processor.save_structured_reviews_to_json(reviews, temp_path)
+            
+            # Verify file exists
+            self.assertTrue(os.path.exists(temp_path))
+            
+            # Read and verify content
+            with open(temp_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Check structure
+            self.assertIn('metadata', data)
+            self.assertIn('reviews', data)
+            self.assertIn('generated_at', data['metadata'])
+            self.assertIn('total_reviews', data['metadata'])
+            self.assertEqual(data['metadata']['total_reviews'], 2)
+            
+            # Check reviews
+            self.assertEqual(len(data['reviews']), 2)
+            self.assertEqual(data['reviews'][0]['id'], 'review1')
+            self.assertEqual(data['reviews'][1]['id'], 'review2')
+    
+    def test_save_structured_reviews_creates_directory(self):
+        """Test that saving creates output directory if it doesn't exist."""
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Path with non-existent subdirectory
+            output_path = os.path.join(temp_dir, 'subdir', 'output.json')
+            
+            reviews = [{'id': 'test1', 'sentiment': 'Positive'}]
+            
+            # Should create directory and file
+            self.processor.save_structured_reviews_to_json(reviews, output_path)
+            
+            # Verify file was created
+            self.assertTrue(os.path.exists(output_path))
+            
+            # Verify content
+            with open(output_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            self.assertEqual(len(data['reviews']), 1)
+
+
 def run_tests():
     """Run all tests."""
     # Create test suite
@@ -236,6 +412,7 @@ def run_tests():
     # Add all test cases
     suite.addTests(loader.loadTestsFromTestCase(TestReviewProcessor))
     suite.addTests(loader.loadTestsFromTestCase(TestReviewProcessorEdgeCases))
+    suite.addTests(loader.loadTestsFromTestCase(TestStructuredInfoExtraction))
     
     # Run tests
     runner = unittest.TextTestRunner(verbosity=2)
